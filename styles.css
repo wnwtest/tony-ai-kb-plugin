@@ -390,3 +390,47 @@
 	border: 1px solid var(--tk-border); background: var(--tk-surface); color: var(--tk-muted);
 }
 .tk-provider-test:hover { background: var(--tk-hover); }
+
+/* ───── 设置面板：全宽编辑行 + Apply 按钮 ───── */
+.tk-set-row {
+	display: flex;
+	flex-direction: column;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--tk-border);
+}
+.tk-set-name { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.tk-set-row .setting-item-description { display: block; margin-bottom: 6px; }
+.tk-set-row > input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 7px 10px;
+	font-size: 13px;
+	font-family: var(--font-monospace);
+	border: 1px solid var(--tk-border);
+	border-radius: 8px;
+	background: var(--tk-bg);
+	color: var(--tk-text);
+	outline: none;
+	transition: border-color 0.15s;
+}
+.tk-set-row > input:focus { border-color: var(--tk-accent); }
+.tk-set-row button {
+	margin-top: 6px;
+	align-self: flex-end;
+	padding: 5px 16px;
+	font-size: 12.5px;
+	border-radius: 7px;
+	cursor: pointer;
+	border: 1px solid var(--tk-border);
+	background: var(--tk-surface);
+	color: var(--tk-muted);
+}
+.tk-set-apply.is-dirty {
+	background: #F59E0B;
+	color: #fff;
+	border-color: #F59E0B;
+	font-weight: 600;
+}
+.tk-set-fetch { margin-left: 0 !important; margin-right: 8px !important; align-self: flex-end !important; }
+/* 模型行：输入 + 按钮组同行 */
+.tk-set-row .tk-btn-group { display: flex; gap: 8px; margin-top: 6px; align-self: flex-end; }

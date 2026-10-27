@@ -119,7 +119,7 @@ export class TonyAIKBSettingTab extends PluginSettingTab {
 				(this.plugin as any).editPipeline();
 			}));
 
-		// ───── Chat 供应商（收敛：一个协议下拉，按协议显示字段，模型可从 API 拉列表） ─────
+		// ───── Chat 供应商（协议下拉 + Apply 式编辑；模型=可编辑组合框：输入过滤+下拉选，获取列表失败可直接手输） ─────
 		containerEl.createEl('h3', { text: 'Chat 供应商' });
 
 		new Setting(containerEl)
@@ -137,65 +137,84 @@ export class TonyAIKBSettingTab extends PluginSettingTab {
 		const chatProfile = s.chatProfiles[s.chatProvider];
 		const chatKind = s.chatProvider;
 
-		new Setting(containerEl)
-			.setName('Base URL')
-			.setDesc(chatKind === 'ollama' ? 'Ollama 服务地址' : chatKind === 'openai' ? '如 https://api.openai.com/v1 或中转站' : '如 https://api.anthropic.com')
-			.addText((t) => t.setValue(chatProfile.baseUrl).onChange(async (v) => {
-				chatProfile.baseUrl = v; await this.save();
-			}));
+		// Base URL：宽输入 + Apply（未 Apply 时标黄，防止误改半截 URL 就生效）
+		const chatUrlRow = containerEl.createDiv({ cls: 'tk-set-row' });
+		chatUrlRow.createEl('span', { cls: 'tk-set-name', text: 'Base URL' });
+		chatUrlRow.createEl('span', {
+			cls: 'setting-item-description',
+			text: chatKind === 'ollama' ? 'Ollama 服务地址' : chatKind === 'openai' ? '如 https://api.openai.com/v1 或中转站' : '如 https://api.anthropic.com',
+		});
+		const chatUrlInput = chatUrlRow.createEl('input', { type: 'text', cls: 'tk-set-input' }) as HTMLInputElement;
+		chatUrlInput.value = chatProfile.baseUrl;
+		const chatUrlApply = chatUrlRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+		const chatUrlDirty = () => { chatUrlApply.classList.toggle('is-dirty', chatUrlInput.value !== chatProfile.baseUrl); };
+		chatUrlInput.addEventListener('input', chatUrlDirty);
+		chatUrlApply.addEventListener('click', async () => {
+			chatProfile.baseUrl = chatUrlInput.value.trim();
+			await this.save();
+			chatUrlApply.classList.remove('is-dirty');
+			chatUrlApply.setText('✓');
+			window.setTimeout(() => chatUrlApply.setText('Apply'), 1200);
+		});
 
 		if (chatKind !== 'ollama') {
-			new Setting(containerEl)
-				.setName('API Key')
-				.setDesc('仅保存在本机 data.json')
-				.addText((t) => { t.inputEl.type = 'password'; t.setValue(chatProfile.apiKey).onChange(async (v) => {
-					chatProfile.apiKey = v; await this.save();
-				}); });
+			const chatKeyRow = containerEl.createDiv({ cls: 'tk-set-row' });
+			chatKeyRow.createEl('span', { cls: 'tk-set-name', text: 'API Key' });
+			chatKeyRow.createEl('span', { cls: 'setting-item-description', text: '仅保存在本机 data.json' });
+			const chatKeyInput = chatKeyRow.createEl('input', { type: 'password', cls: 'tk-set-input' }) as HTMLInputElement;
+			chatKeyInput.value = chatProfile.apiKey;
+			const chatKeyApply = chatKeyRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+			const chatKeyDirty = () => { chatKeyApply.classList.toggle('is-dirty', chatKeyInput.value !== chatProfile.apiKey); };
+			chatKeyInput.addEventListener('input', chatKeyDirty);
+			chatKeyApply.addEventListener('click', async () => {
+				chatProfile.apiKey = chatKeyInput.value;
+				await this.save();
+				chatKeyApply.classList.remove('is-dirty');
+				chatKeyApply.setText('✓');
+				window.setTimeout(() => chatKeyApply.setText('Apply'), 1200);
+			});
 		}
 
-		// Chat 模型：下拉（可从 API 获取列表）+ 手动输入兜底
-		const chatModelSetting = new Setting(containerEl)
-			.setName('Chat 模型')
-			.setDesc(`当前协议 ${chatKind} 的生成模型`);
-		const chatSelect = chatModelSetting.controlEl.createEl('select') as HTMLSelectElement;
-		chatSelect.className = 'dropdown';
-		chatSelect.style.width = '160px';
-		// 当前值作为首选项
-		chatSelect.createEl('option', { value: chatProfile.model, text: chatProfile.model || '（选择模型）' });
-		chatSelect.addEventListener('change', async () => {
-			chatProfile.model = chatSelect.value;
+		// Chat 模型：可编辑组合框（datalist）——列表可下拉选，失败可手输，同一框
+		const chatModelRow = containerEl.createDiv({ cls: 'tk-set-row' });
+		chatModelRow.createEl('span', { cls: 'tk-set-name', text: 'Chat 模型' });
+		chatModelRow.createEl('span', { cls: 'setting-item-description', text: `当前协议 ${chatKind} 的生成模型；可直接输入或从列表选择` });
+		const chatModelInput = chatModelRow.createEl('input', { type: 'text', cls: 'tk-set-input' }) as HTMLInputElement;
+		chatModelInput.setAttribute('list', 'tk-chat-models');
+		chatModelInput.value = chatProfile.model;
+		const chatDatalist = chatModelRow.createEl('datalist', { attr: { id: 'tk-chat-models' } });
+		chatDatalist.createEl('option', { value: chatProfile.model });
+		const chatModelApply = chatModelRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+		const chatModelDirty = () => { chatModelApply.classList.toggle('is-dirty', chatModelInput.value.trim() !== chatProfile.model); };
+		chatModelInput.addEventListener('input', chatModelDirty);
+		chatModelApply.addEventListener('click', async () => {
+			const v = chatModelInput.value.trim();
+			if (!v) return;
+			chatProfile.model = v;
 			await this.save();
+			chatModelApply.classList.remove('is-dirty');
+			chatModelApply.setText('✓');
+			window.setTimeout(() => chatModelApply.setText('Apply'), 1200);
 		});
-		chatModelSetting.addButton((b) => b.setButtonText('获取模型列表').onClick(async () => {
-			b.setButtonText('获取中…'); b.buttonEl.disabled = true;
+		const chatFetchBtn = chatModelRow.createEl('button', { cls: 'tk-set-fetch', text: '获取模型列表' });
+		chatFetchBtn.addEventListener('click', async () => {
+			chatFetchBtn.setText('获取中…'); chatFetchBtn.disabled = true;
 			try {
-				const models = await OllamaClient.fetchModelList(chatKind, chatProfile.baseUrl, chatProfile.apiKey);
-				chatSelect.empty();
-				if (models.length === 0) {
-					chatSelect.createEl('option', { value: '', text: '（无模型）' });
-				} else {
-					for (const m of models) {
-						chatSelect.createEl('option', { value: m, text: m });
-					}
-					chatSelect.value = models.includes(chatProfile.model) ? chatProfile.model : models[0]!;
-					chatProfile.model = chatSelect.value;
-					await this.save();
+				// 优先用输入框当前值（可能已改但未 Apply），失败再退回归档值
+				const baseUrl = chatUrlInput.value.trim() || chatProfile.baseUrl;
+				const models = await OllamaClient.fetchModelList(chatKind, baseUrl, chatProfile.apiKey);
+				chatDatalist.empty();
+				for (const m of models) chatDatalist.createEl('option', { value: m });
+				if (models.length > 0 && !models.includes(chatModelInput.value)) {
+					chatModelInput.value = models.includes(chatProfile.model) ? chatProfile.model : models[0]!;
+					chatModelDirty();
 				}
-				b.setButtonText(`✓ ${models.length} 个模型`);
+				chatFetchBtn.setText(`✓ ${models.length} 个`);
 			} catch (e: any) {
-				b.setButtonText(`✗ ${e?.message?.slice(0, 30) ?? '失败'}`);
+				chatFetchBtn.setText(`✗ ${e?.message?.slice(0, 24) ?? '失败'}`);
 			}
-			window.setTimeout(() => { b.setButtonText('获取模型列表'); b.buttonEl.disabled = false; }, 2500);
-		}));
-		// 手动输入兜底（模型列表接口不可用时）
-		new Setting(containerEl)
-			.setName('（或手动填入模型 ID）')
-			.setDesc('获取列表失败时手动填')
-			.addText((t) => {
-				t.setPlaceholder(chatProfile.model || 'model-id');
-				t.setValue(chatProfile.model);
-				t.onChange(async (v) => { chatProfile.model = v; await this.save(); });
-			});
+			window.setTimeout(() => { chatFetchBtn.setText('获取模型列表'); chatFetchBtn.disabled = false; }, 2500);
+		});
 
 		// ───── Embedding 供应商（同收敛设计） ─────
 		containerEl.createEl('h3', { text: 'Embedding 供应商' });
@@ -215,63 +234,82 @@ export class TonyAIKBSettingTab extends PluginSettingTab {
 		const embKey: 'ollama' | 'openai' = s.embeddingProvider === 'openai' ? 'openai' : 'ollama';
 		const embProfile = s.embeddingProfiles[embKey];
 
-		new Setting(containerEl)
-			.setName('Base URL')
-			.setDesc(embKey === 'ollama' ? 'Ollama 服务地址' : '如 https://api.openai.com/v1')
-			.addText((t) => t.setValue(embProfile.baseUrl).onChange(async (v) => {
-				embProfile.baseUrl = v; await this.save();
-			}));
+		const embUrlRow = containerEl.createDiv({ cls: 'tk-set-row' });
+		embUrlRow.createEl('span', { cls: 'tk-set-name', text: 'Base URL' });
+		embUrlRow.createEl('span', { cls: 'setting-item-description', text: embKey === 'ollama' ? 'Ollama 服务地址' : '如 https://api.openai.com/v1' });
+		const embUrlInput = embUrlRow.createEl('input', { type: 'text', cls: 'tk-set-input' }) as HTMLInputElement;
+		embUrlInput.value = embProfile.baseUrl;
+		const embUrlApply = embUrlRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+		const embUrlDirty = () => { embUrlApply.classList.toggle('is-dirty', embUrlInput.value !== embProfile.baseUrl); };
+		embUrlInput.addEventListener('input', embUrlDirty);
+		embUrlApply.addEventListener('click', async () => {
+			embProfile.baseUrl = embUrlInput.value.trim();
+			await this.save();
+			embUrlApply.classList.remove('is-dirty');
+			embUrlApply.setText('✓');
+			window.setTimeout(() => embUrlApply.setText('Apply'), 1200);
+		});
 
 		if (embKey !== 'ollama') {
-			new Setting(containerEl)
-				.setName('API Key')
-				.setDesc('仅保存在本机 data.json')
-				.addText((t) => { t.inputEl.type = 'password'; t.setValue(embProfile.apiKey).onChange(async (v) => {
-					embProfile.apiKey = v; await this.save();
-				}); });
+			const embKeyRow = containerEl.createDiv({ cls: 'tk-set-row' });
+			embKeyRow.createEl('span', { cls: 'tk-set-name', text: 'API Key' });
+			embKeyRow.createEl('span', { cls: 'setting-item-description', text: '仅保存在本机 data.json' });
+			const embKeyInput = embKeyRow.createEl('input', { type: 'password', cls: 'tk-set-input' }) as HTMLInputElement;
+			embKeyInput.value = embProfile.apiKey;
+			const embKeyApply = embKeyRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+			const embKeyDirty = () => { embKeyApply.classList.toggle('is-dirty', embKeyInput.value !== embProfile.apiKey); };
+			embKeyInput.addEventListener('input', embKeyDirty);
+			embKeyApply.addEventListener('click', async () => {
+				embProfile.apiKey = embKeyInput.value;
+				await this.save();
+				embKeyApply.classList.remove('is-dirty');
+				embKeyApply.setText('✓');
+				window.setTimeout(() => embKeyApply.setText('Apply'), 1200);
+			});
 		}
 
-		const embModelSetting = new Setting(containerEl)
-			.setName('Embedding 模型')
-			.setDesc('切换后需「Rebuild index」重建向量库');
-		const embSelect = embModelSetting.controlEl.createEl('select') as HTMLSelectElement;
-		embSelect.className = 'dropdown';
-		embSelect.style.width = '160px';
-		embSelect.createEl('option', { value: embProfile.model, text: embProfile.model || '（选择模型）' });
-		embSelect.addEventListener('change', async () => {
-			embProfile.model = embSelect.value;
+		// Embedding 模型：同组合框 + Apply + Rebuild 提示
+		const embModelRow = containerEl.createDiv({ cls: 'tk-set-row' });
+		embModelRow.createEl('span', { cls: 'tk-set-name', text: 'Embedding 模型' });
+		embModelRow.createEl('span', { cls: 'setting-item-description', text: '切换并 Apply 后需「Rebuild index」重建向量库' });
+		const embModelInput = embModelRow.createEl('input', { type: 'text', cls: 'tk-set-input' }) as HTMLInputElement;
+		embModelInput.setAttribute('list', 'tk-emb-models');
+		embModelInput.value = embProfile.model;
+		const embDatalist = embModelRow.createEl('datalist', { attr: { id: 'tk-emb-models' } });
+		embDatalist.createEl('option', { value: embProfile.model });
+		const embModelApply = embModelRow.createEl('button', { cls: 'tk-set-apply', text: 'Apply' });
+		const embModelDirty = () => { embModelApply.classList.toggle('is-dirty', embModelInput.value.trim() !== embProfile.model); };
+		embModelInput.addEventListener('input', embModelDirty);
+		embModelApply.addEventListener('click', async () => {
+			const v = embModelInput.value.trim();
+			if (!v) return;
+			embProfile.model = v;
 			await this.save();
+			embModelApply.classList.remove('is-dirty');
+			embModelApply.setText('✓');
+			window.setTimeout(() => embModelApply.setText('Apply'), 1200);
 		});
-		embModelSetting.addButton((b) => b.setButtonText('获取模型列表').onClick(async () => {
-			b.setButtonText('获取中…'); b.buttonEl.disabled = true;
+		const embFetchBtn = embModelRow.createEl('button', { cls: 'tk-set-fetch', text: '获取模型列表' });
+		embFetchBtn.addEventListener('click', async () => {
+			embFetchBtn.setText('获取中…'); embFetchBtn.disabled = true;
 			try {
-				const models = await OllamaClient.fetchModelList(embKey, embProfile.baseUrl, embProfile.apiKey);
-				embSelect.empty();
-				if (models.length === 0) {
-					embSelect.createEl('option', { value: '', text: '（无模型）' });
-				} else {
-					for (const m of models) embSelect.createEl('option', { value: m, text: m });
-					embSelect.value = models.includes(embProfile.model) ? embProfile.model : models[0]!;
-					embProfile.model = embSelect.value;
-					await this.save();
+				const baseUrl = embUrlInput.value.trim() || embProfile.baseUrl;
+				const models = await OllamaClient.fetchModelList(embKey, baseUrl, embProfile.apiKey);
+				embDatalist.empty();
+				for (const m of models) embDatalist.createEl('option', { value: m });
+				if (models.length > 0 && !models.includes(embModelInput.value)) {
+					embModelInput.value = models.includes(embProfile.model) ? embProfile.model : models[0]!;
+					embModelDirty();
 				}
-				b.setButtonText(`✓ ${models.length} 个模型`);
+				embFetchBtn.setText(`✓ ${models.length} 个`);
 			} catch (e: any) {
-				b.setButtonText(`✗ ${e?.message?.slice(0, 30) ?? '失败'}`);
+				embFetchBtn.setText(`✗ ${e?.message?.slice(0, 24) ?? '失败'}`);
 			}
-			window.setTimeout(() => { b.setButtonText('获取模型列表'); b.buttonEl.disabled = false; }, 2500);
-		}));
-		new Setting(containerEl)
-			.setName('（或手动填入模型 ID）')
-			.setDesc('获取列表失败时手动填')
-			.addText((t) => {
-				t.setPlaceholder(embProfile.model || 'model-id');
-				t.setValue(embProfile.model);
-				t.onChange(async (v) => { embProfile.model = v; await this.save(); });
-			});
+			window.setTimeout(() => { embFetchBtn.setText('获取模型列表'); embFetchBtn.disabled = false; }, 2500);
+		});
 
 		containerEl.createEl('p', {
-			text: '各协议配置独立保存，切换协议不丢失。Chat 切换即时生效；Embedding 换模型需「Rebuild index」。',
+			text: 'URL / Key / 模型修改后需点 Apply 生效（按钮变黄=有未应用修改）。各协议配置独立保存，切换协议不丢失。Chat 即时生效；Embedding 换模型需 Rebuild index。',
 			cls: 'setting-item-description',
 		});
 
