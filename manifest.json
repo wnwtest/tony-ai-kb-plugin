@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "tony-ai-kb-plugin",
+	"name": "Tony AI KB",
+	"version": "0.3.0",
 	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"description": "本地向量知识库 + RAG 问答（远端 Ollama：bge-m3 检索 + qwen 生成，thinking 关闭）。",
+	"author": "tony",
+	"authorUrl": "https://github.com/wnwtest",
+	"isDesktopOnly": true
 }
