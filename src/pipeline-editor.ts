@@ -235,7 +235,7 @@ export class PipelineEditorModal extends Modal {
 				const specs = PARAM_SPECS[type] ?? [];
 				for (const spec of specs) {
 					if (spec.type === 'toggle') newSub.params![spec.key] = spec.key === 'stream';
-					else if (spec.type === 'number') newSub.params![spec.key] = spec.key === 'topK' ? 5 : spec.key === 'temperature' ? 0.3 : spec.key === 'maxChars' ? 6000 : 0;
+					else if (spec.type === 'number') newSub.params![spec.key] = spec.key === 'topK' ? 8 : spec.key === 'temperature' ? 0.3 : spec.key === 'maxChars' ? 6000 : 0;
 					else newSub.params![spec.key] = '';
 				}
 				nodes.push(newSub);
@@ -294,7 +294,7 @@ export class PipelineEditorModal extends Modal {
 		const specs = PARAM_SPECS[type] ?? [];
 		for (const spec of specs) {
 			if (spec.type === 'toggle') node.params![spec.key] = (spec.key === 'stream') ? true : false;
-			else if (spec.type === 'number') node.params![spec.key] = (spec.key === 'topK') ? 5 : (spec.key === 'temperature') ? 0.3 : (spec.key === 'maxChars') ? 6000 : 0;
+			else if (spec.type === 'number') node.params![spec.key] = (spec.key === 'topK') ? 8 : (spec.key === 'temperature') ? 0.3 : (spec.key === 'maxChars') ? 6000 : 0;
 			else if (spec.type === 'text') node.params![spec.key] = type === 'branch' ? 'has_results' : '';
 			else if (spec.type === 'textarea') node.params![spec.key] = '';
 		}

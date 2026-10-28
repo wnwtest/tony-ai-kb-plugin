@@ -49,7 +49,7 @@ export const DEFAULT_PIPELINE_JSON = `{
   "nodes": [
     { "id": "q",        "type": "input",    "out": ["query"] },
     { "id": "embed",    "type": "embed",     "params": { "model": "bge-m3" },     "in": { "text": "{{q.query}}" },          "out": ["vector"] },
-    { "id": "retrieve", "type": "retrieve",  "params": { "topK": 5 },              "in": { "vector": "{{embed.vector}}", "queryText": "{{q.query}}" },   "out": ["chunks"] },
+    { "id": "retrieve", "type": "retrieve",  "params": { "topK": 8 },              "in": { "vector": "{{embed.vector}}", "queryText": "{{q.query}}" },   "out": ["chunks"] },
     { "id": "ctx",      "type": "context",   "params": { "maxChars": 6000 },      "in": { "chunks": "{{retrieve.chunks}}" }, "out": ["context", "citations"] },
     { "id": "chat",     "type": "chat",       "params": {
         "model": "qwen3.5:9b",
