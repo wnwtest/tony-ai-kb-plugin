@@ -503,7 +503,7 @@ export default class TonyAIKBPlugin extends Plugin {
 				progress.show('检索中…');
 				const store = this.store.store!;
 				const t0 = Date.now();
-				const hits: SearchHit[] = search(qv, store.chunks, 5);
+				const hits: SearchHit[] = search(qv, query, store.chunks, 5);
 				const ms = Date.now() - t0;
 				progress.hide();
 				const summary = hits.map((h, i) => ({

@@ -35,13 +35,14 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 		return { vector };
 	},
 
-	/** 余弦检索 Top-K。 */
+	/** 混合检索（向量+BM25关键词）Top-K。 */
 	retrieve: async (inputs, params, ctx) => {
 		const vector = inputs.vector as number[];
+		const queryText = String(inputs.queryText ?? inputs.text ?? '');
 		const topK = Number(params.topK ?? 5);
 		const minScore = Number(params.minScore ?? 0);
 		if (!ctx.store.store) throw new Error('store 未就绪，请先 Rebuild index');
-		const hits = search(vector, ctx.store.store.chunks, topK).filter((h) => h.score >= minScore);
+		const hits = search(vector, queryText, ctx.store.store.chunks, topK).filter((h) => h.score >= minScore);
 		return { chunks: hits };
 	},
 

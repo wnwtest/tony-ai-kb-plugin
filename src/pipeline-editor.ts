@@ -314,14 +314,18 @@ export class PipelineEditorModal extends Modal {
 		const ref = `{{${prevId}.${prevOut}}}`;
 		const wiring: Record<string, Record<string, string>> = {
 			embed: { text: ref },
-			retrieve: { vector: ref },
-			rerank: { chunks: ref },
+			retrieve: { vector: ref },			rerank: { chunks: ref },
 			context: { chunks: ref },
 			condition: { chunks: ref },
 			chat: { context: ref },
 			output: { answer: ref },
 		};
 		const inDef = { ...(wiring[newType] ?? {}) };
+		// retrieve 还需要 queryText（混合检索的 BM25 通道，从 input 节点取原文）
+		if (newType === 'retrieve') {
+			const inputNode = this.pipe.nodes.find((n) => n.type === 'input');
+			if (inputNode) inDef.queryText = `{{${inputNode.id}.query}}`;
+		}
 		// chat 还需要 query（从 input 节点）
 		if (newType === 'chat') {
 			const inputNode = this.pipe.nodes.find((n) => n.type === 'input');

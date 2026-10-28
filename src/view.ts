@@ -190,7 +190,7 @@ export class TonyAIKBView extends ItemView {
 		try {
 			const qv = await this.ollama.getEmbedding(q);
 			const t0 = Date.now();
-			const hits = search(qv, this.store.store!.chunks, 10);
+			const hits = search(qv, q, this.store.store!.chunks, 10);
 			const ms = Date.now() - t0;
 			this.renderSearchResults(q, hits, ms);
 		} catch (e) {
