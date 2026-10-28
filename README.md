@@ -14,9 +14,27 @@ ChatGPT 式统一界面的 Obsidian 本地知识库插件：向量检索 + RAG �
 - **增量更新**：笔记修改/创建/删除后自动增量重嵌（mtime 比对，可关）
 - **代码块增强**：深色卡片 + 语言标签 + 一键复制
 
-## 快速开始
+## 安装（最终用户）
 
-1. 确保 Ollama 服务可用（默认 `http://192.168.119.219:11434`，模型 `bge-m3` + `qwen3.5:9b`）
+插件通过 GitHub Release 分发（未上架官方社区市场）。两种方式任选：
+
+**A. BRAT（推荐，自动更新）**
+1. 安装 [Obsidian 42 - BRAT](https://github.com/TfTHacker/obsidian42-brat) 插件
+2. BRAT 设置 → Add Beta plugin → 填 `wnwtest/tony-ai-kb-plugin`
+3. Obsidian 设置 → 第三方插件 → 启用 **Tony AI KB**
+
+**B. 手动**
+1. 到 [Releases](../../releases) 下载最新版的 `main.js`、`manifest.json`、`styles.css`
+2. 三个文件放入 vault 的 `.obsidian/plugins/tony-ai-kb-plugin/` 目录
+3. Obsidian 设置 → 第三方插件 → 启用 **Tony AI KB**
+
+启用后：左侧 🔍 图标打开侧栏 → ⚙ 旁的 ⟳ **Rebuild index** 建库（首次约 2 分钟）→ 直接问答。
+
+> 数据库（`store.*`）不随插件分发——每个用户根据自己的 vault 重建。
+
+## 快速开始（开发）
+
+1. 确保 Ollama 服务可用（默认 `http://localhost:11434`，模型 `bge-m3` + `qwen3.5:9b`；在插件设置里改成你的 Ollama 地址）
 2. 安装依赖：
    ```bash
    npm install
@@ -60,24 +78,46 @@ src/
 ├── ollama.ts          # LLM 客户端（ollama/openai/anthropic 三协议 chat+embedding，SSE/NDJSON 流式）
 ├── chunker.ts         # Chunker 类（TFile → 切片）
 ├── chunk-text.ts      # 纯切片逻辑（可单测）
-├── store.ts           # 向量库（落盘 + mtime 增量）
-├── search.ts          # 余弦相似度检索
-├── nodes.ts           # 流水线节点实现
-├── pipeline.ts        # 流水线引擎（拓扑排序 + 模板取值 + 分支递归）
+├── store.ts           # 向量库（store.json 元数据 + store.bin 二进制向量，自动迁移）
+├── search.ts          # 余弦相似度 + BM25 混合检索
+├── nodes.ts           # 流水线节点实现（含 rerank：质量评估 + MMR 多样化）
+├── pipeline.ts        # 流水线引擎（拓扑排序 + 模板取值 + 分支递归 + 旧 DSL 迁移）
 ├── pipeline-editor.ts # 图形化流水线编辑器（增删/排序/分支）
 ├── rag.ts             # RAG 薄壳（run + runStream，system/think 覆盖）
 ├── view.ts            # ChatGPT 式侧栏视图（Markdown 渲染 + 代码块复制）
 ├── skills.ts          # 技能预设 + Markdown 输出规范
+├── util.ts            # 纯工具（errMsg，不依赖 obsidian）
 └── settings.ts        # 收敛式设置面板（协议下拉 + 模型列表获取）
 ```
 
 ## 测试
 
 ```bash
-# 切片逻辑单元测试（13 项）
-npx esbuild tests/chunk-text.test.ts --bundle --format=esm --platform=node --outfile=.tmp/test.mjs
-node .tmp/test.mjs
+# 全套单元测试（48 项：切片/混合检索/流水线迁移/context/rerank/二进制 store）
+for t in search chunk-text pipeline-migrate context-node rerank store-binary; do
+  npx esbuild tests/$t.test.ts --bundle --platform=node --format=cjs --outfile=.test-tmp/$t.cjs --external:obsidian
+  node .test-tmp/$t.cjs
+done
 ```
+
+端到端验证（需 Ollama 在线，跑真实向量）：
+
+```bash
+npx esbuild tests/verify-rerank.ts --bundle --platform=node --format=cjs --outfile=.test-tmp/v.cjs --external:obsidian
+node .test-tmp/v.cjs
+```
+
+## 发版
+
+```bash
+# bump 版本号（manifest.json + versions.json）
+npm run version
+git commit -am "chore: bump version"
+git tag 0.3.0
+git push origin master --tags
+```
+
+tag 推送后 GitHub Actions（`.github/workflows/release.yml`）自动构建并创建 **draft release**，附 `main.js` / `manifest.json` / `styles.css`。到 GitHub Release 页面编辑说明后发布即可。
 
 ## 技术栈
 

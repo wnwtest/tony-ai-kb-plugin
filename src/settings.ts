@@ -33,12 +33,12 @@ export const DEFAULT_SETTINGS: TonyAIKBSettings = {
 	chatProvider: 'ollama',
 	embeddingProvider: 'ollama',
 	chatProfiles: {
-		ollama: { baseUrl: 'http://192.168.119.219:11434', apiKey: '', model: 'qwen3.5:9b' },
+		ollama: { baseUrl: 'http://localhost:11434', apiKey: '', model: 'qwen3.5:9b' },
 		openai: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' },
 		anthropic: { baseUrl: 'https://api.anthropic.com', apiKey: '', model: 'claude-sonnet-4-20250514' },
 	},
 	embeddingProfiles: {
-		ollama: { baseUrl: 'http://192.168.119.219:11434', apiKey: '', model: 'bge-m3' },
+		ollama: { baseUrl: 'http://localhost:11434', apiKey: '', model: 'bge-m3' },
 		openai: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'text-embedding-3-small' },
 	},
 
