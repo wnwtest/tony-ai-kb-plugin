@@ -64,7 +64,10 @@ export class Rag {
 		const def = await this.loadDef();
 		const engine = new PipelineEngine(def, { ollama: this.ollama, store: this.store });
 		const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
-		const retrievalQuery = lastUser ? `${lastUser}\n${query}` : query;
+		let retrievalQuery = lastUser ? `${lastUser}\n${query}` : query;
+		// 检索 query 增强：中英混合口语查询（"camera pdaf的工作原理是什么"）中，
+		// 英文术语权重会被口语稀释导致漏检——提取英文术语片段追加强化。
+		retrievalQuery += enhanceQueryTerms(query);
 		if (signal?.aborted) throw new Error('已中止');
 		const prep = await engine.prepareContext(retrievalQuery);
 		if (signal?.aborted) throw new Error('已中止');
@@ -95,4 +98,19 @@ export class Rag {
 			model: r.model,
 		};
 	}
+}
+
+/**
+ * 查询术语强化：提取中英混合查询里的英文/数字术语（≥2 字符），以 "term term" 形式追加。
+ * 例："camera pdaf的工作原理是什么" → "\ncamera pdaf camera pdaf"
+ * embedding 对重复词敏感，追加后术语权重上升，避免口语稀释导致漏检。
+ * 纯中文查询不受影响（无英文片段则返回空串）。
+ */
+export function enhanceQueryTerms(query: string): string {
+	const terms = query.match(/[A-Za-z][A-Za-z0-9_.-]{1,}/g) ?? [];
+	// 过滤太短的常见词（a/of/the 等）与重复
+	const filtered = [...new Set(terms.map((t) => t.toLowerCase()))]
+		.filter((t) => t.length >= 3 || /^[a-z]{2}\d/i.test(t));
+	if (filtered.length === 0) return '';
+	return `\n${filtered.join(' ')} ${filtered.join(' ')}`;
 }
