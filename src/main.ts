@@ -147,6 +147,15 @@ export default class TonyAIKBPlugin extends Plugin {
 
 		this.addSettingTab(new TonyAIKBSettingTab(this.app, this));
 
+		// 启动兜底：加载后自动增量一次（静默），对齐外部脚本生成的旁车/离线修改的文件
+		// （vault 事件只覆盖 Obsidian 内的改动；Python 抽取脚本在 Obsidian 外写盘，事件不可靠）
+		if (this.settings.autoReindexOnSave) {
+			this.incrementalTimer = window.setTimeout(() => {
+				this.incrementalTimer = null;
+				void this.runIncrementalUpdate(true);
+			}, 8000); // 等 Obsidian 完成库索引后再扫，延迟 8s
+		}
+
 		console.log('[tony-ai-kb] loaded; M10 complete. Commands: Ping Ollama, Chunk current file, Rebuild index, Embed current file, Search (dev test), Open Tony AI KB view, Re-index current file, Incremental update (scan), Ask (RAG dev test), Edit pipeline.json');
 	}
 
@@ -250,8 +259,8 @@ export default class TonyAIKBPlugin extends Plugin {
 		}, delayMs ?? this.settings.autoReindexDelayMs);
 	}
 
-	/** 增量扫描 + 重嵌变化文件。 */
-	private async runIncrementalUpdate(): Promise<void> {
+	/** 增量扫描 + 重嵌变化文件。quiet=true 时不弹无变化 Notice（启动兜底静默用）。 */
+	private async runIncrementalUpdate(quiet = false): Promise<void> {
 		if (!this.store.store) return; // 库未建，跳过（避免误触发全量）
 		const progress = new ProgressNotice();
 		progress.show('增量更新：扫描中…');
@@ -261,7 +270,7 @@ export default class TonyAIKBPlugin extends Plugin {
 			);
 			progress.hide();
 			if (r.changed === 0 && r.deleted === 0) {
-				new Notice(`增量：无变化（扫描 ${r.scanned} 文件）`, 3000);
+				if (!quiet) new Notice(`增量：无变化（扫描 ${r.scanned} 文件）`, 3000);
 				return;
 			}
 			const lines = [
