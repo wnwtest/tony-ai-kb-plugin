@@ -13,6 +13,7 @@ export default defineConfig(
 		'package.json',
 		'package-lock.json',
 		'tsconfig.json',
+		'tests', // 测试/验证脚本是 dev-only，不进 main.js，不受插件 lint 规则约束
 	]),
 	{
 		languageOptions: {
