@@ -532,12 +532,6 @@ export function cosine(a: number[], b: number[]): number {
 	return d === 0 ? 0 : dot / d;
 }
 
-/** 把任意错误归一成 OllamaError 或 Error 的 message。 */
-export function errMsg(e: unknown): string {
-	if (e instanceof Error) return e.message;
-	return String(e);
-}
-
 /** 便捷：用 Notice 弹一行消息。 */
 export function notify(message: string, timeoutMs = 4000): void {
 	new Notice(message, timeoutMs);

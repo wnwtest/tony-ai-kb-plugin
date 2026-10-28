@@ -1,5 +1,7 @@
 import { ItemView, MarkdownRenderer, MarkdownView, Notice, WorkspaceLeaf } from 'obsidian';
-import { errMsg, OllamaClient, type ChatMessage } from './ollama';
+import { OllamaClient, type ChatMessage } from './ollama';
+import { errMsg } from './util';
+
 import { search, type SearchHit } from './search';
 import { VectorStore } from './store';
 import { Rag } from './rag';

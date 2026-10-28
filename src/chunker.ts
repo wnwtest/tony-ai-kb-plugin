@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import { chunkText, type ChunkTextOptions, type RawChunk } from './chunk-text';
 
 /** Chunker.chunkFile 的选项。 */

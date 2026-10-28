@@ -1,6 +1,7 @@
-import { App, TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import { Chunker, type RawChunk } from './chunker';
-import { OllamaClient, errMsg } from './ollama';
+import { OllamaClient } from './ollama';
+import { errMsg } from './util';
 
 /**
  * 向量库：落盘 store.json + 内存索引。
@@ -75,12 +76,42 @@ export class VectorStore {
 		}
 	}
 
+	/** 二进制向量文件路径：store.json → store.bin。 */
+	private binPath(): string {
+		return this.opts.path.replace(/\.json$/, '.bin');
+	}
+
 	private async doLoad(): Promise<Store | null> {
 		try {
 			if (await this.app.vault.adapter.exists(this.opts.path)) {
 				const raw = await this.app.vault.adapter.read(this.opts.path);
 				const s = JSON.parse(raw) as Store;
 				if (s && typeof s === 'object' && Array.isArray(s.chunks)) {
+					const binPath = this.binPath();
+					const dim = s.dim || 0;
+					// 优先从 store.bin 读向量（Float32 二进制，零解析）
+					let vectorsLoaded = false;
+					if (await this.app.vault.adapter.exists(binPath)) {
+						const buf = await this.app.vault.adapter.readBinary(binPath);
+						const need = s.chunks.length * dim * 4;
+						// 校验大小（防写入中断导致 bin 不完整或非 4 字节对齐）
+						if (dim > 0 && buf.byteLength >= need && buf.byteLength % 4 === 0) {
+							const floats = new Float32Array(buf);
+							for (let i = 0; i < s.chunks.length; i++) {
+								s.chunks[i]!.vector = Array.from(floats.subarray(i * dim, (i + 1) * dim));
+							}
+							vectorsLoaded = true;
+						} else {
+							console.warn('[tony-ai-kb] store.bin 大小不匹配，回退 JSON 内嵌向量', { bytes: buf.byteLength, need });
+						}
+					}
+					if (!vectorsLoaded && s.chunks.some((c) => Array.isArray(c.vector) && c.vector.length > 0)) {
+						// 旧格式（向量内嵌 JSON）或迁移被中断：用 JSON 向量，并迁移到二进制（一次性）
+						console.log('[tony-ai-kb] store.json 含内嵌向量，迁移到二进制 store.bin...');
+						this.store = s;
+						await this.save();
+						console.log('[tony-ai-kb] 迁移完成，后续加载走 store.bin');
+					}
 					this.store = s;
 					return s;
 				}
@@ -92,10 +123,32 @@ export class VectorStore {
 		return null;
 	}
 
-	/** 内存 → 落盘。 */
+	/** 内存 → 落盘。向量写 store.bin（Float32 二进制），元数据写 store.json（不含向量）。 */
 	async save(): Promise<void> {
 		if (!this.store) return;
-		await this.app.vault.adapter.write(this.opts.path, JSON.stringify(this.store));
+		const st = this.store;
+		const dim = st.dim || st.chunks[0]?.vector.length || 0;
+		// 先写 store.bin（中断安全：bin 写完前 store.json 仍保留旧向量，加载可回退）
+		const buf = new ArrayBuffer(st.chunks.length * dim * 4);
+		const view = new Float32Array(buf);
+		for (let i = 0; i < st.chunks.length; i++) {
+			const v = st.chunks[i]!.vector;
+			for (let j = 0; j < dim && j < v.length; j++) view[i * dim + j] = v[j]!;
+		}
+		await this.app.vault.adapter.writeBinary(this.binPath(), buf);
+		// 再写 store.json（剥离 vector：体积从 298MB 降到 ~20MB，解析快）
+		const meta = {
+			version: st.version,
+			model: st.model,
+			dim,
+			complete: st.complete,
+			builtAt: st.builtAt,
+			chunks: st.chunks.map((c) => ({
+				id: c.id, file: c.file, header: c.header, content: c.content,
+				lineStart: c.lineStart, mtime: c.mtime,
+			})),
+		};
+		await this.app.vault.adapter.write(this.opts.path, JSON.stringify(meta));
 	}
 
 	/** 全量重建：切片 → 批量向量化 → 落盘。 */

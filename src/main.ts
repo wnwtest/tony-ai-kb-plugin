@@ -1,5 +1,6 @@
 import { App, Modal, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
-import { ChatResult, errMsg, OllamaClient } from './ollama';
+import { ChatResult, OllamaClient } from './ollama';
+import { errMsg } from './util';
 import { Chunker, RawChunk } from './chunker';
 import { VectorStore, type IncrementalResult, type RebuildResult } from './store';
 import { search, type SearchHit } from './search';
