@@ -78,11 +78,17 @@ export class TonyAIKBView extends ItemView {
 		const composer = body.createDiv({ cls: 'tk-composer' });
 		this.buildComposer(composer);
 
-		await this.store.load();
-		this.setStatus(this.store.store
-			? `${this.store.store.chunks.length} 片段 · dim ${this.store.store.dim}`
-			: '库未就绪，请先重建索引');
+		// 先渲染 UI（即时显示），store 后台加载——store.json 298MB 的 JSON.parse 不阻塞 view 显示。
+		// load() 自带缓存（已加载直接返回）+ 去重（与后台增量共用同一 promise）。
+		this.setStatus('加载知识库…');
 		this.showHint();
+		window.setTimeout(() => {
+			void this.store.load().then((s) => {
+				this.setStatus(s && s.complete
+					? `${s.chunks.length} 片段 · dim ${s.dim}`
+					: '库未就绪，请先重建索引');
+			});
+		}, 0);
 	}
 
 	async onClose(): Promise<void> {

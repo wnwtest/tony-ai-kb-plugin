@@ -53,6 +53,8 @@ const DEFAULT_ROUND = 6;
 
 export class VectorStore {
 	store: Store | null = null;
+	/** 进行中的加载 promise：去重，避免 view 与后台增量同时读 298MB store.json。 */
+	private loadPromise: Promise<Store | null> | null = null;
 
 	constructor(
 		private readonly app: App,
@@ -61,8 +63,19 @@ export class VectorStore {
 		public opts: VectorStoreOptions,
 	) {}
 
-	/** 读盘 → 内存。 */
+	/** 读盘 → 内存。已加载则直接返回（缓存）；正在加载则复用同一 promise（去重）。 */
 	async load(): Promise<Store | null> {
+		if (this.store) return this.store;
+		if (this.loadPromise) return this.loadPromise;
+		this.loadPromise = this.doLoad();
+		try {
+			return await this.loadPromise;
+		} finally {
+			this.loadPromise = null;
+		}
+	}
+
+	private async doLoad(): Promise<Store | null> {
 		try {
 			if (await this.app.vault.adapter.exists(this.opts.path)) {
 				const raw = await this.app.vault.adapter.read(this.opts.path);
