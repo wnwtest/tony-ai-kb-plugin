@@ -1,6 +1,6 @@
 import type { OllamaClient } from './ollama';
 import type { VectorStore } from './store';
-import { search, type SearchHit } from './search';
+import { cosine, search, tokenize, type SearchHit } from './search';
 
 /**
  * 流水线节点实现（参考 Dify 节点）。
@@ -44,6 +44,55 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 		if (!ctx.store.store) throw new Error('store 未就绪，请先 Rebuild index');
 		const hits = search(vector, queryText, ctx.store.store.chunks, topK).filter((h) => h.score >= minScore);
 		return { chunks: hits };
+	},
+
+	/**
+	 * 重排：引用质量评估 + MMR 多样化。
+	 * 质量分（quality）= 0.6·相关性(混合检索归一分) + 0.2·查询术语覆盖率 + 0.2·内容丰富度(log长度)。
+	 * MMR 贪心选下一条：score = λ·quality - (1-λ)·与已选片段最大余弦。
+	 * λ 默认 0.7（质量主导，多样性软约束）——同源但内容互补的仍可入选，
+	 * 只把高度雷同的（如同一张图的多个旁车）压下去。不以来源一刀切。
+	 */
+	rerank: async (inputs, params) => {
+		const hits = ((inputs.chunks ?? []) as SearchHit[]).filter((h) => h && h.chunk);
+		const queryText = String(inputs.queryText ?? '');
+		const strategy = String(params.strategy ?? 'mmr');
+		const topK = Number(params.topK ?? 6);
+
+		if (strategy === 'keyword' || strategy === 'length') {
+			// 简单策略：keyword（查询术语命中数）/ length（内容长度）
+			const qt = new Set(tokenize(queryText));
+			const ov = (h: SearchHit): number => {
+				const toks = new Set(tokenize(`${h.chunk.header} ${h.chunk.content}`));
+				let n = 0; for (const t of qt) if (toks.has(t)) n++;
+				return n;
+			};
+			const sorted = [...hits].sort((a, b) =>
+				strategy === 'length' ? b.chunk.content.length - a.chunk.content.length : ov(b) - ov(a),
+			);
+			return { chunks: sorted.slice(0, topK) };
+		}
+
+		// MMR + quality（默认策略）
+		const lambda = Number(params.lambda ?? 0.7);
+		const qualities = computeQualities(hits, queryText);
+		const selected: SearchHit[] = [];
+		const remaining = hits.map((_, i) => i);
+		while (selected.length < topK && remaining.length) {
+			let bestI = -1;
+			let bestScore = -Infinity;
+			for (const i of remaining) {
+				const diversity = selected.length === 0
+					? 0
+					: Math.max(...selected.map((s) => cosine(hits[i]!.chunk.vector, s.chunk.vector)));
+				const mmr = lambda * qualities[i]! - (1 - lambda) * diversity;
+				if (mmr > bestScore) { bestScore = mmr; bestI = i; }
+			}
+			if (bestI < 0) break;
+			selected.push({ chunk: hits[bestI]!.chunk, score: qualities[bestI]! });
+			remaining.splice(remaining.indexOf(bestI), 1);
+		}
+		return { chunks: selected };
 	},
 
 	/** 拼 [n] 上下文 + 截断 + 去重（同 file+header 去重）。 */
@@ -108,3 +157,28 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 		};
 	},
 };
+
+// ───────── 引用质量评估（rerank 用） ─────────
+
+/**
+ * 引用质量分：0.6·相关性 + 0.2·查询术语覆盖率 + 0.2·内容丰富度。
+ * - 相关性：直接用 retrieve 混合检索分（search() 已对全库 min-max 归一，落 [0,1]），
+ *   不再在本批内二次归一——否则批次里最低分候选 rel=0，会抹掉其 60% 质量，
+ *   把检索分稍低但内容扎实的专文（如 PDAF 专文 hybrid #8）误杀。
+ * - 覆盖率：chunk 命中的查询 token 比例（token 去重）——奖励真正谈到查询概念的片段。
+ * - 丰富度：log(contentLen)/log(2000)，2000 字封顶——短图片旁车信息量低被适度降权，
+ *   但不否定（高质量短片段仍可入选），避免一刀切。
+ */
+function computeQualities(hits: SearchHit[], queryText: string): number[] {
+	const queryTokens = [...new Set(tokenize(queryText))];
+	const qtCount = Math.max(queryTokens.length, 1);
+	return hits.map((h) => {
+		const rel = Math.max(0, Math.min(1, h.score));
+		const chunkToks = new Set(tokenize(`${h.chunk.header} ${h.chunk.content}`));
+		let covered = 0;
+		for (const t of queryTokens) if (chunkToks.has(t)) covered++;
+		const coverage = covered / qtCount;
+		const richness = Math.min(1, Math.log(h.chunk.content.length + 1) / Math.log(2000));
+		return 0.6 * rel + 0.2 * coverage + 0.2 * richness;
+	});
+}

@@ -1,7 +1,7 @@
 import type { StoredChunk } from './store';
 
 /** 余弦相似度（本地实现，避免依赖 ollama.ts→obsidian 的链，便于纯 node 单测）。 */
-function cosine(a: number[], b: number[]): number {
+export function cosine(a: number[], b: number[]): number {
 	const n = Math.min(a.length, b.length);
 	let dot = 0, na = 0, nb = 0;
 	for (let i = 0; i < n; i++) {

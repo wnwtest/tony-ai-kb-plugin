@@ -8,7 +8,7 @@ const NODE_META: Record<string, { icon: string; title: string; desc: string; out
 	input: { icon: '⌨️', title: '输入', desc: '接收用户问题', out: ['query'] },
 	embed: { icon: '🔢', title: '向量化', desc: '文本 → embedding 向量', out: ['vector'] },
 	retrieve: { icon: '🔍', title: '检索', desc: '余弦相似度 Top-K 片段', out: ['chunks'] },
-	rerank: { icon: '🔄', title: '重排', desc: '按关键词/长度重排、去重', out: ['chunks'] },
+	rerank: { icon: '🔄', title: '重排', desc: '引用质量评估 + MMR 多样化', out: ['chunks'] },
 	context: { icon: '📄', title: '拼上下文', desc: '[n] 引用标记 + 截断 + 去重', out: ['context', 'citations'] },
 	condition: { icon: '🔀', title: '条件', desc: 'score < 阈值则跳过生成', out: ['chunks'] },
 	branch: { icon: '🔱', title: '条件分支', desc: 'IF/ELSE：按条件分叉执行 then 或 else 子流', out: ['answer', 'citations'] },
@@ -37,7 +37,9 @@ const PARAM_SPECS: Record<string, ParamSpec[]> = {
 		{ key: 'minScore', label: '最低分数', desc: '低于此分过滤（0=不过滤）', type: 'number' },
 	],
 	rerank: [
-		{ key: 'strategy', label: '策略', desc: 'keyword 或 length', type: 'text' },
+		{ key: 'strategy', label: '策略', desc: 'mmr(质量+多样性重排，推荐) / keyword / length', type: 'text' },
+		{ key: 'topK', label: '保留数', desc: '重排后保留的片段数', type: 'number' },
+		{ key: 'lambda', label: '质量/多样性', desc: '0–1，越大越重质量，默认 0.7', type: 'number' },
 	],
 	context: [
 		{ key: 'maxChars', label: '最大字符', desc: '上下文总字符上限', type: 'number' },
@@ -61,6 +63,33 @@ const PARAM_SPECS: Record<string, ParamSpec[]> = {
 /** 生成唯一节点 id：type + 4 位随机。 */
 function genId(type: string): string {
 	return `${type}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** 节点默认参数（按 `${type}.${key}` 索引）。新建节点与分支子流共用。 */
+const NODE_PARAM_DEFAULTS: Record<string, unknown> = {
+	'embed.model': 'bge-m3',
+	'retrieve.topK': 12,
+	'retrieve.minScore': 0,
+	'rerank.strategy': 'mmr',
+	'rerank.topK': 6,
+	'rerank.lambda': 0.7,
+	'context.maxChars': 6000,
+	'condition.threshold': 0,
+	'branch.condition': 'has_results',
+	'chat.model': '',
+	'chat.think': false,
+	'chat.temperature': 0.3,
+	'chat.stream': true,
+	'chat.system': '',
+};
+
+/** 为节点填充默认参数。 */
+function applyDefaultParams(type: string, params: Record<string, unknown>): void {
+	const specs = PARAM_SPECS[type] ?? [];
+	for (const spec of specs) {
+		if (params[spec.key] !== undefined) continue;
+		params[spec.key] = NODE_PARAM_DEFAULTS[`${type}.${spec.key}`] ?? (spec.type === 'toggle' ? false : spec.type === 'number' ? 0 : '');
+	}
 }
 
 /**
@@ -231,13 +260,7 @@ export class PipelineEditorModal extends Modal {
 			chip.addEventListener('click', () => {
 				const id = genId(type);
 				const newSub: NodeDef = { id, type, out: meta.out, params: {} };
-				// 默认参数
-				const specs = PARAM_SPECS[type] ?? [];
-				for (const spec of specs) {
-					if (spec.type === 'toggle') newSub.params![spec.key] = spec.key === 'stream';
-					else if (spec.type === 'number') newSub.params![spec.key] = spec.key === 'topK' ? 8 : spec.key === 'temperature' ? 0.3 : spec.key === 'maxChars' ? 6000 : 0;
-					else newSub.params![spec.key] = '';
-				}
+				applyDefaultParams(type, newSub.params!);
 				nodes.push(newSub);
 				this.render();
 			});
@@ -290,14 +313,7 @@ export class PipelineEditorModal extends Modal {
 		const prev = this.pipe.nodes[this.pipe.nodes.length - 1];
 		const inDef = this.autoWireIn(prev, type);
 		const node: NodeDef = { id, type, in: inDef, out: meta.out, params: {} };
-		// 设默认参数值
-		const specs = PARAM_SPECS[type] ?? [];
-		for (const spec of specs) {
-			if (spec.type === 'toggle') node.params![spec.key] = (spec.key === 'stream') ? true : false;
-			else if (spec.type === 'number') node.params![spec.key] = (spec.key === 'topK') ? 8 : (spec.key === 'temperature') ? 0.3 : (spec.key === 'maxChars') ? 6000 : 0;
-			else if (spec.type === 'text') node.params![spec.key] = type === 'branch' ? 'has_results' : '';
-			else if (spec.type === 'textarea') node.params![spec.key] = '';
-		}
+		applyDefaultParams(type, node.params!);
 		// branch 节点设默认子流
 		if (type === 'branch') {
 			node.branches = { condition: 'has_results', then: [], else: [] };
