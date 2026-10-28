@@ -240,7 +240,40 @@ export default class TonyAIKBPlugin extends Plugin {
 		}
 	}
 
-	/** 编辑 pipeline.json（M10：JSON 文本编辑器；设置面板与视图入口共用）。 */
+	/** 按传入的原始值（设置面板草稿，未 Apply）测试连通。 */
+	async testProviderRaw(kind: string, baseUrl: string, apiKey: string, model: string): Promise<{ ok: boolean; msg: string }> {
+		const k = kind as 'ollama' | 'openai' | 'anthropic';
+		const url = baseUrl.replace(/\/+$/, '');
+		try {
+			if (k === 'ollama') {
+				const res = await fetch(`${url}/api/chat`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], stream: false, think: false, options: { num_predict: 1 } }),
+				});
+				if (!res.ok) return { ok: false, msg: `HTTP ${res.status}` };
+				return { ok: true, msg: '' };
+			}
+			if (k === 'openai') {
+				const res = await fetch(`${url}/chat/completions`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+					body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+				});
+				if (!res.ok) return { ok: false, msg: `HTTP ${res.status}` };
+				return { ok: true, msg: '' };
+			}
+			const res = await fetch(`${url}/v1/messages`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+				body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+			});
+			if (!res.ok) return { ok: false, msg: `HTTP ${res.status}` };
+			return { ok: true, msg: '' };
+		} catch (e: any) {
+			return { ok: false, msg: e?.message ?? '网络错误' };
+		}
+	}
 	async editPipeline(): Promise<void> {
 		new PipelineEditorModal(this.app, this, PIPELINE_PATH).open();
 	}

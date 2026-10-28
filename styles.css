@@ -434,3 +434,49 @@
 .tk-set-fetch { margin-left: 0 !important; margin-right: 8px !important; align-self: flex-end !important; }
 /* 模型行：输入 + 按钮组同行 */
 .tk-set-row .tk-btn-group { display: flex; gap: 8px; margin-top: 6px; align-self: flex-end; }
+
+/* ───── 设置面板：供应商单块（三列 + 一个 Apply） ───── */
+.tk-provider-block {
+	border: 1px solid var(--tk-border);
+	border-radius: 10px;
+	padding: 12px 14px;
+	background: var(--tk-surface);
+	margin: 8px 0 14px;
+}
+.tk-pv-grid {
+	display: flex;
+	gap: 12px;
+	margin-bottom: 8px;
+	align-items: flex-end;
+	flex-wrap: wrap;
+}
+.tk-pv-cell { display: flex; flex-direction: column; gap: 4px; }
+.tk-pv-cell.tk-pv-grow { flex: 1; min-width: 180px; }
+.tk-pv-label { font-size: 12px; color: var(--tk-muted); font-weight: 500; }
+.tk-pv-input {
+	padding: 6px 10px; font-size: 13px; font-family: var(--font-monospace);
+	border: 1px solid var(--tk-border); border-radius: 7px;
+	background: var(--tk-bg); color: var(--tk-text); outline: none;
+	width: 100%; box-sizing: border-box;
+}
+.tk-pv-input:focus { border-color: var(--tk-accent); }
+select.tk-pv-input { font-family: inherit; width: auto; min-width: 120px; }
+.tk-pv-modelrow { display: flex; gap: 6px; align-items: center; }
+.tk-pv-modelrow .tk-pv-input { flex: 1; }
+.tk-pv-fetch {
+	flex-shrink: 0; width: 32px; height: 32px;
+	border: 1px solid var(--tk-border); border-radius: 7px;
+	background: var(--tk-surface); color: var(--tk-muted); cursor: pointer; font-size: 14px;
+}
+.tk-pv-fetch:hover:not(:disabled) { background: var(--tk-hover); }
+.tk-pv-actions {
+	display: flex; gap: 8px; justify-content: flex-end;
+	margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--tk-border);
+}
+.tk-pv-actions button {
+	padding: 6px 20px; font-size: 12.5px; border-radius: 7px; cursor: pointer;
+	border: 1px solid var(--tk-border); background: var(--tk-surface); color: var(--tk-muted);
+}
+.tk-pv-actions .tk-set-apply.is-dirty {
+	background: #F59E0B; color: #fff; border-color: #F59E0B; font-weight: 600;
+}
