@@ -52,8 +52,10 @@ export class Chunker {
 		});
 	}
 
-	/** 文档旁车：按 `## @@doc:path#page N@@ 标题` 分隔行切块，头行写进 header。兼容 CRLF（Python 产出）。 */
+	/** 文档旁车：按 `## @@doc:/@@img:` 分隔行切块。图片描述天然短（~150字），用独立低阈值。 */
 	private chunkSidecar(file: TFile, content: string, mtime: number, opts: ChunkOptions): RawChunk[] {
+		const isImg = IMG_SIDECAR_EXT.some((e) => file.name.toLowerCase().endsWith(e));
+		const minLen = isImg ? 30 : (opts.minChunkLen ?? 200); // 图片描述 30 字即可；文档页 200 字
 		const lines = content.split('\n');
 		const out: RawChunk[] = [];
 		let header = '';
@@ -61,7 +63,7 @@ export class Chunker {
 		let buf: string[] = [];
 		const flush = (): void => {
 			const body = buf.join('\n').trim();
-			if (header && body.length >= (opts.minChunkLen ?? 200)) {
+			if (header && body.length >= minLen) {
 				out.push({ file: file.path, header, content: body, lineStart: startLine, mtime });
 			}
 			buf = [];
