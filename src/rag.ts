@@ -4,6 +4,7 @@ import type { VectorStore } from './store';
 import type { SearchHit } from './search';
 import {
 	DEFAULT_PIPELINE_JSON,
+	migratePipeline,
 	PipelineEngine,
 	type NodeLogCb,
 	type Pipeline,
@@ -27,7 +28,17 @@ export class Rag {
 			if (await this.app.vault.adapter.exists(this.path)) {
 				const raw = await this.app.vault.adapter.read(this.path);
 				const def = JSON.parse(raw) as Pipeline;
-				if (def && Array.isArray(def.nodes) && def.nodes.length > 0) return def;
+				if (def && Array.isArray(def.nodes) && def.nodes.length > 0) {
+					// 旧版 DSL 自动迁移（如 retrieve 缺 queryText 连线），变更则写回盘上
+					if (migratePipeline(def)) {
+						try {
+							await this.app.vault.adapter.write(this.path, JSON.stringify(def, null, 2));
+						} catch (e) {
+							console.warn('[tony-ai-kb] 迁移后写回 pipeline.json failed', e);
+						}
+					}
+					return def;
+				}
 			}
 		} catch (e) {
 			console.warn('[tony-ai-kb] load pipeline.json failed，使用默认 DSL', e);

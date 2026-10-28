@@ -22,4 +22,5 @@ data.json
 .DS_Store
 # build temp
 .tmp/
+.test-tmp/
 main.js

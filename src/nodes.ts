@@ -59,8 +59,19 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 			if (seen.has(key)) continue;
 			seen.add(key);
 			const seg = `[${used.length + 1}] ${h.chunk.file} :: ${h.chunk.header}\n${h.chunk.content}\n\n`;
-			if (buf.length + seg.length > maxChars) break;
+			// 放得下整条 → 加入；放不下 → 跳过看下一条（而非 break）。
+			// 旧逻辑 break 会让单个超大 chunk（如 8835 字的 PDAF 校准片段）清空整个 context，
+			// 导致 Top-1 超长时 LLM 拿到空上下文 → "不知道"。跳过让后续更短的命片段（如 PDAF 专文）进入。
+			if (buf.length + seg.length > maxChars) continue;
 			buf += seg;
+			used.push(h);
+		}
+		// 兜底：所有命片段都超长导致 buf 为空时，截断 Top-1 塞入，至少给 LLM 一点上下文
+		if (buf.length === 0 && hits.length > 0) {
+			const h = hits[0]!;
+			const header = `[1] ${h.chunk.file} :: ${h.chunk.header}\n`;
+			const content = h.chunk.content.slice(0, Math.max(0, maxChars - header.length - 4));
+			buf = `${header}${content}\n\n`;
 			used.push(h);
 		}
 		return { context: buf, citations: used };

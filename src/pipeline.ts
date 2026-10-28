@@ -66,6 +66,34 @@ export const DEFAULT_PIPELINE_JSON = `{
 }
 `;
 
+/**
+ * 旧版 DSL 迁移：retrieve 节点缺 queryText 连线（混合检索 BM25 通道的关键词输入）时，
+ * 自动补 `{{<input节点id>.query}}`。就地修改，返回是否发生变更。
+ * 背景：盘上已存在的 pipeline.json 不会被 DEFAULT_PIPELINE_JSON 覆盖——
+ * 混合检索上线前的旧文件缺这条连线 → BM25 无输入 → 退化为纯向量 → 术语漏检。
+ * 仅补缺失项；用户显式配置过的 queryText（模板或字面量）尊重原值。
+ */
+export function migratePipeline(def: Pipeline): boolean {
+	const inputNode = def.nodes.find((n) => n.type === 'input');
+	if (!inputNode) return false;
+	const ref = `{{${inputNode.id}.query}}`;
+	let changed = false;
+	const fix = (nodes: NodeDef[]): void => {
+		for (const n of nodes) {
+			if (n.type === 'retrieve' && n.in?.queryText == null) {
+				n.in = { ...(n.in ?? {}), queryText: ref };
+				changed = true;
+			}
+			if (n.branches) {
+				fix(n.branches.then);
+				fix(n.branches.else);
+			}
+		}
+	};
+	fix(def.nodes);
+	return changed;
+}
+
 /** 解析模板值：`{{id.key}}` → outputs[id][key]（保留类型，如 number[]/数组）；否则原样返回。 */
 function resolveValue(v: unknown, outputs: Record<string, NodeOutputs>): unknown {
 	if (typeof v === 'string') {
