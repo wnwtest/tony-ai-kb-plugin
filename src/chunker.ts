@@ -49,7 +49,7 @@ export class Chunker {
 		});
 	}
 
-	/** 文档旁车：按 `## @@doc:path#page N@@ 标题` 分隔行切块，头行写进 header。 */
+	/** 文档旁车：按 `## @@doc:path#page N@@ 标题` 分隔行切块，头行写进 header。兼容 CRLF（Python 产出）。 */
 	private chunkSidecar(file: TFile, content: string, mtime: number, opts: ChunkOptions): RawChunk[] {
 		const lines = content.split('\n');
 		const out: RawChunk[] = [];
@@ -64,7 +64,7 @@ export class Chunker {
 			buf = [];
 		};
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!;
+			const line = lines[i]!.replace(/\r$/, '');
 			const m = line.match(/^## @@doc:(.+?)#\w+\s*[\w\s.]*@@\s*(.*)$/);
 			if (m) {
 				flush();
