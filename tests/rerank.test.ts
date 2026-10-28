@@ -27,10 +27,11 @@ const runRerank = async (hits: SearchHit[], params: Record<string, unknown> = {}
 // 场景：6 张近乎雷同的图片旁车（短、术语密集、向量相近）+ 1 篇 PDAF 专文（长、高质量、向量与旁车不同）
 const IMG_VEC = [0.9, 0.1, 0.0];
 const EXPERT_VEC = [0.1, 0.95, 0.2];
-const imgHits = Array.from({ length: 6 }, (_, i) => mkHit(`img${i}`, `图片描述 PDAF 对焦 自动对焦 算法 ${i}`, 0.85 + i * 0.01, IMG_VEC));
-// 专文：检索分低于图片（真实数据：hybrid 专文 #8 ~0.73，图 #1 ~0.90），但内容长、查询术语覆盖高
+// 图片旁车：短、术语密集、向量相近、检索分中等
+const imgHits = Array.from({ length: 6 }, (_, i) => mkHit(`img${i}`, `图片描述 PDAF 对焦 自动对焦 算法 ${i}`, 0.80 + i * 0.01, IMG_VEC));
+// 专文：检索分最高（真实数据 expert rel ~0.92，高于图）、内容长、查询术语覆盖高
 const EXPERT_BODY = 'PDAF 相位检测自动对焦工作原理：根据 CIS 像素相位差判断镜头移动向量，实现快速对焦。'.repeat(8);
-const expert = mkHit('expert', EXPERT_BODY, 0.80, EXPERT_VEC);
+const expert = mkHit('expert', EXPERT_BODY, 0.92, EXPERT_VEC);
 const allHits = [...imgHits, expert];
 
 void (async () => {
@@ -91,6 +92,25 @@ await check('length 策略：按内容长度排序', async () => {
 await check('空输入不崩溃', async () => {
 	const out = await runRerank([], { topK: 6 });
 	assert.equal(out.length, 0);
+});
+
+await check('minRel 相关性下限：过滤低分 tangential 长文', async () => {
+	// 一条相关短文（检索分高）+ 一条 tangential 长文（检索分低、但内容长丰富度高）
+	const relevant = mkHit('rel', 'camera pdaf 对焦 原理 相位差', 0.85, EXPERT_VEC);
+	const tangential = mkHit('tan', '压力测试 稳定性 长文档'.repeat(50), 0.20, IMG_VEC);
+	// minRel=0.3：tangential(0.20) 被过滤，只剩 relevant
+	const out = await runRerank([relevant, tangential], { topK: 2, minRel: 0.3 });
+	const ids = out.map((h) => h.chunk.id);
+	assert.ok(!ids.includes('tan'), `tangential 长文应被 minRel 过滤，实际入选: ${ids.join(',')}`);
+	assert.ok(ids.includes('rel'));
+});
+
+await check('minRel 全部低于下限时回退，不返回空', async () => {
+	// 两条都低于 minRel → 回退到原候选，按 MMR 选
+	const a = mkHit('a', '内容', 0.10, IMG_VEC);
+	const b = mkHit('b', '内容', 0.15, EXPERT_VEC);
+	const out = await runRerank([a, b], { topK: 2, minRel: 0.3 });
+	assert.equal(out.length, 2, '全部低于下限时应回退返回全部');
 });
 
 console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ''}`);

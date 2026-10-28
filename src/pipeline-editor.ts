@@ -40,6 +40,7 @@ const PARAM_SPECS: Record<string, ParamSpec[]> = {
 		{ key: 'strategy', label: '策略', desc: 'mmr(质量+多样性重排，推荐) / keyword / length', type: 'text' },
 		{ key: 'topK', label: '保留数', desc: '重排后保留的片段数', type: 'number' },
 		{ key: 'lambda', label: '质量/多样性', desc: '0–1，越大越重质量，默认 0.7', type: 'number' },
+		{ key: 'minRel', label: '相关性下限', desc: 'retrieve 分低于此值的候选过滤掉（防 tangential 长文混入），默认 0.3', type: 'number' },
 	],
 	context: [
 		{ key: 'maxChars', label: '最大字符', desc: '上下文总字符上限', type: 'number' },
@@ -73,6 +74,7 @@ const NODE_PARAM_DEFAULTS: Record<string, unknown> = {
 	'rerank.strategy': 'mmr',
 	'rerank.topK': 6,
 	'rerank.lambda': 0.7,
+	'rerank.minRel': 0.3,
 	'context.maxChars': 6000,
 	'condition.threshold': 0,
 	'branch.condition': 'has_results',

@@ -75,21 +75,27 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 
 		// MMR + quality（默认策略）
 		const lambda = Number(params.lambda ?? 0.7);
-		const qualities = computeQualities(hits, queryText);
+		const minRel = Number(params.minRel ?? 0.3);
+		// 相关性下限：过滤掉 retrieve 分过低的候选（哪怕长文档丰富度高），
+		// 防止 tangential 长文（如压力测试 PDF 偶尔提到 camera）靠长度红利混入。
+		// 全部低于下限时回退到原候选，不返回空。
+		let pool = hits.filter((h) => h.score >= minRel);
+		if (pool.length === 0) pool = hits;
+		const qualities = computeQualities(pool, queryText);
 		const selected: SearchHit[] = [];
-		const remaining = hits.map((_, i) => i);
+		const remaining = pool.map((_, i) => i);
 		while (selected.length < topK && remaining.length) {
 			let bestI = -1;
 			let bestScore = -Infinity;
 			for (const i of remaining) {
 				const diversity = selected.length === 0
 					? 0
-					: Math.max(...selected.map((s) => cosine(hits[i]!.chunk.vector, s.chunk.vector)));
+					: Math.max(...selected.map((s) => cosine(pool[i]!.chunk.vector, s.chunk.vector)));
 				const mmr = lambda * qualities[i]! - (1 - lambda) * diversity;
 				if (mmr > bestScore) { bestScore = mmr; bestI = i; }
 			}
 			if (bestI < 0) break;
-			selected.push({ chunk: hits[bestI]!.chunk, score: qualities[bestI]! });
+			selected.push({ chunk: pool[bestI]!.chunk, score: qualities[bestI]! });
 			remaining.splice(remaining.indexOf(bestI), 1);
 		}
 		return { chunks: selected };
@@ -161,13 +167,13 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
 // ───────── 引用质量评估（rerank 用） ─────────
 
 /**
- * 引用质量分：0.6·相关性 + 0.2·查询术语覆盖率 + 0.2·内容丰富度。
- * - 相关性：直接用 retrieve 混合检索分（search() 已对全库 min-max 归一，落 [0,1]），
- *   不再在本批内二次归一——否则批次里最低分候选 rel=0，会抹掉其 60% 质量，
- *   把检索分稍低但内容扎实的专文（如 PDAF 专文 hybrid #8）误杀。
+ * 引用质量分：0.7·相关性 + 0.2·查询术语覆盖率 + 0.1·内容丰富度。
+ * - 相关性：直接用 retrieve 混合检索分（search 已对全库归一，落 [0,1]），不在批内
+ *   二次归一——否则最低分候选 rel=0 抹掉大半质量，把检索分稍低但内容扎实的专文误杀。
+ *   权重 0.6→0.7：相关性主导，压制长文档靠丰富度越级。
  * - 覆盖率：chunk 命中的查询 token 比例（token 去重）——奖励真正谈到查询概念的片段。
- * - 丰富度：log(contentLen)/log(2000)，2000 字封顶——短图片旁车信息量低被适度降权，
- *   但不否定（高质量短片段仍可入选），避免一刀切。
+ * - 丰富度：log(contentLen)/log(2000)，2000 字封顶。权重 0.2→0.1：弱化长度红利，
+ *   避免长但 tangential 的文档（如偶提 camera 的压力测试 PDF）挤掉实质笔记。
  */
 function computeQualities(hits: SearchHit[], queryText: string): number[] {
 	const queryTokens = [...new Set(tokenize(queryText))];
@@ -179,6 +185,6 @@ function computeQualities(hits: SearchHit[], queryText: string): number[] {
 		for (const t of queryTokens) if (chunkToks.has(t)) covered++;
 		const coverage = covered / qtCount;
 		const richness = Math.min(1, Math.log(h.chunk.content.length + 1) / Math.log(2000));
-		return 0.6 * rel + 0.2 * coverage + 0.2 * richness;
+		return 0.7 * rel + 0.2 * coverage + 0.1 * richness;
 	});
 }
